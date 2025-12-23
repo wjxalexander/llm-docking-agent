@@ -26,16 +26,20 @@ You are a research assitant who focus on using AutoDock-Vina to help us docking.
 [Document your architectural decisions and patterns]
 
 ### Testing Strategy
-[Explain your testing approach and requirements]
 
 ### Git Workflow
-[Describe your branching strategy and commit conventions]
 
 ## Domain Context
-[Add domain-specific knowledge that AI assistants need to understand]
+there are some ipynb prjects you can refer:
+under the directory *notebooks/auto-dock-vina* there are 3 examples:
+1. notebooks/auto-dock-vina/basic_docking.ipynb
+The basic docking example is a rewrite based on the original basic docking example. In this example, a small molecule ligand (Imatinib, PDB token STI) is docked back to a hollow protein structure of mouse c-Abl (PDB token 1IEP) to reproduce the complex structure. A docked pose that closely resembles the original position of the ligand is expected among the top-ranked poses.
+2. notebooks/auto-dock-vina/flexible_docking.ipynb
+The flexible docking example is a rewrite based on the original flexible docking example. In this example, a variant of Imatinib (PDB token PRC) is docked back to a hollow protein structure of mouse c-Abl (PDB token 1FPU) to reproduce the complex structure. Additionally, Thr315 is set to be a flexible residue. A docked pose that closely resembles the original position of the ligand and a flipped Thr315 are expected among the top-ranked poses.
+3.notebooks/auto-dock-vina/docking_with_AD4SF.ipynb
+The using AutoDock4 (AD4) scoring function (SF) example is a rewrite based on the corresponding part of the original basic docking example. This example conducts the same redocking experiment as in Basic docking with the AutoDock4 scoring function instead of Vina. To do this, Autogrid4 is used to compute the grid maps, as an additional step after receptor preparation.
+
 
 ## Important Constraints
-[List any technical, business, or regulatory constraints]
-
+- **Directory Structure Stability**: Do not modify the project directory structure (e.g., creating, moving, or deleting top-level directories) easily. Any such changes must be justified and proposed through a formal change process.
 ## External Dependencies
-[Document key external services, APIs, or systems]
