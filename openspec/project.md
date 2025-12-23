@@ -61,11 +61,21 @@ conda create -n vina-cli vina -c conda-forge -y
 
 # 3. The vina binary will be at:
 #    /opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina
+#                                                                             
+# To activate this environment, use                                           
+#                                                                             
+#     $ conda activate vina-cli                                               
+#                                                                             
+# To deactivate an active environment, use                                    
+#                                                                             
+#     $ conda deactivate                                                      
+                               
 ```
 
 #### Using Vina CLI
 
 Call `vina` via subprocess. The binary path is `/opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina` (or set `VINA_PATH` env var).
+
 
 ```bash
 # Basic docking command
