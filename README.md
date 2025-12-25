@@ -112,3 +112,46 @@ The application provides two levels of observability:
 **To disable in deployments:** Edit Terraform config to set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false`.
 
 See the [observability guide](https://googlecloudplatform.github.io/agent-starter-pack/guide/observability.html) for detailed instructions, example queries, and visualization options.
+
+### AutoDock Vina Integration
+
+**Problem**: The `vina` Python package on PyPI requires compiling C++ code with Boost. On Apple Silicon Macs, this fails because the package's `setup.py` has hardcoded search paths (`/usr/local/include`, `/usr/include`, conda env) that don't include Homebrew's `/opt/homebrew/include`.
+
+**Solution**: Install Vina CLI separately via Conda, then call it via subprocess from the agent.
+
+#### Local Development Setup (macOS)
+
+```bash
+# 1. Install Miniforge (if not installed)
+brew install miniforge
+
+# 2. Create a dedicated conda environment for Vina CLI
+conda create -n vina-cli vina -c conda-forge -y
+
+# 3. The vina binary will be at:
+#    /opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina
+#                                                                             
+# To activate this environment, use                                           
+#                                                                             
+#     $ conda activate vina-cli                                               
+#                                                                             
+# To deactivate an active environment, use                                    
+#                                                                             
+#     $ conda deactivate                                                      
+                               
+```
+
+#### Using Vina CLI
+
+Call `vina` via subprocess. The binary path is `/opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina` (or set `VINA_PATH` env var).
+
+
+```bash
+# Basic docking command
+/opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina \
+    --receptor receptor.pdbqt \
+    --ligand ligand.pdbqt \
+    --center_x 0 --center_y 0 --center_z 0 \
+    --size_x 20 --size_y 20 --size_z 20 \
+    --out output.pdbqt
+```
