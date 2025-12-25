@@ -1,16 +1,24 @@
 # Project Context
 
 ## Purpose
-You are a research assitant who focus on using AutoDock-Vina to help us docking.
+You are a research assistant focusing on molecular docking using AutoDock Vina. The project provides a ReAct agent built with Google's Agent Development Kit (ADK) to help researchers perform basic, flexible, and advanced docking workflows.
 
 ## Tech Stack
-- Google Genimi 3
-- Python
-- Google Agent Starter Pack
+- **Language**: Python 3.10+
+- **Agent Framework**: Google Agent Development Kit (ADK) / Agent Starter Pack
+- **LLM**: Google Gemini 3 (Flash Preview)
+- **Package Manager**: `uv`
+- **Infrastructure**: Google Cloud Platform (Agent Engine, Vertex AI)
+- **IaC**: Terraform
+- **Scientific Libraries**: RDKit, Meeko, Gemmi, Numpy, Scipy
+- **Docking Engine**: AutoDock Vina (CLI)
+- **CI/CD**: Google Cloud Build / GitHub Actions
 
 ## Project Conventions
 
 ### Code Style
+- **Formatting**: Strictly follow `ruff` formatting and linting rules (configured in `pyproject.toml`).
+- **Typing**: Use static type hints for all function signatures. `mypy` is used for verification.
 - **Descriptive Naming**: Use clear, specific names for variables, functions, and classes. Favor readability over brevity.
   - Variables/Functions: `snake_case` (e.g., `docking_score_threshold`).
   - Classes: `PascalCase` (e.g., `DockingAnalyzer`).
@@ -19,15 +27,25 @@ You are a research assitant who focus on using AutoDock-Vina to help us docking.
 - **Strong Verb-Noun Pairs**: Functions should be named using a strong verb and a clear noun (e.g., `parse_ligand_file`).
 - **Simplicity & Readability**: Prefer straightforward code over "clever" solutions. Code should be self-documenting.
 - **Defensive Programming**: Validate inputs and handle edge cases or errors early (fail-fast).
-- **Documentation**: Use docstrings for all public modules, classes, and functions to explain *what* they do. Use comments to explain *why* something is done if it's not obvious.
+- **Documentation**: Use Google-style docstrings for all public modules, classes, and functions. Use comments to explain *why* something is done if it's not obvious.
 - **Single Responsibility**: Each function or class should focus on a single, well-defined task.
 
 ### Architecture Patterns
-Uv as the repo manager
+- **ReAct Agent**: Follows the Reason+Act pattern using `google.adk`.
+- **Tool-Based Design**: Functionality is exposed to the agent via discrete tools (typically in `app/tools/` or as functions in `app/agent.py`).
+- **Artifact Management**: Uses `GcsArtifactService` for cloud deployments and `InMemoryArtifactService` for local development.
+- **Telemetry**: OpenTelemetry is used for tracing and monitoring (integrated with Google Cloud Trace).
+
 ### Testing Strategy
-[Explain your testing approach and requirements]
+- **Unit Testing**: Focused on individual tools and utility functions in `tests/unit/`.
+- **Integration Testing**: End-to-end tests for agent flows in `tests/integration/`, often involving streaming responses.
+- **Load Testing**: Performance testing using Locust (scripts in `tests/load_test/`).
+- **Command**: Use `make test` to run the suite.
 
 ### Git Workflow
+- **Spec-Driven Development**: All significant changes must follow the OpenSpec process (create proposal in `openspec/changes/`, update specs, then implement).
+- **Branching**: Use descriptive feature branches (e.g., `feat/add-autodock-tool`).
+- **PRs**: All PRs should pass linting (`make lint`) and tests (`make test`) before merging.
 
 ## Domain Context
 there are some ipynb prjects you can refer:
@@ -41,13 +59,26 @@ The using AutoDock4 (AD4) scoring function (SF) example is a rewrite based on th
 
 
 ## Important Constraints
-- **Directory Structure Stability**: Do not modify the project directory structure (e.g., creating, moving, or deleting top-level directories) easily. Any such changes must be justified and proposed through a formal change process.
+- **Directory Structure Stability**: Do not modify the project directory structure (e.g., creating, moving, or deleting top-level directories) without a formal change proposal.
+- **Dependency Management**: Use `uv` exclusively for Python dependency management. Do not use `pip` directly unless inside a Dockerfile where `uv` is not yet available.
+- **Specific Versions**: Certain scientific packages (e.g., `meeko==0.6.1`) have strict version requirements due to API compatibility with docking workflows.
+- **Vina Execution**: Vina MUST be called via subprocess using the path provided in the `VINA_PATH` environment variable.
 ## External Dependencies
 
+### Core Libraries (via uv)
+- `google-adk`: Agent Development Kit for building ReAct agents.
+- `google-cloud-aiplatform`: Vertex AI SDK for Gemini and Agent Engine.
+- `rdkit`, `meeko`, `gemmi`: specialized libraries for molecular preparation and analysis.
+- `opentelemetry`: for observability.
+
+### System Dependencies
+- **AutoDock Vina**: Required for docking simulations.
+  - **Local (macOS)**: Installed via Conda (Miniforge) to avoid compilation issues with Apple Silicon. Binary path typically `/opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina`.
+  - **Deployment**: Installed via Conda in the custom Docker container.
 
 #### Deployment (Google Cloud Agent Engine)
 
-For deployment, use a custom Docker image with Vina pre-installed:
+For deployment, the project uses a custom Docker image to ensure Vina and its system dependencies (like Conda/Miniconda) are available.
 
 ```dockerfile 
 FROM python:3.11-slim
@@ -74,10 +105,12 @@ CMD ["uv", "run", "python", "-m", "app.agent_engine_app"]
 
 #### Summary Table
 
-| Component | Manager | Location |
-|-----------|---------|----------|
-| Python deps (numpy, rdkit, meeko, etc.) | uv | `pyproject.toml` |
-| Vina CLI binary | Conda (separate) | `/opt/homebrew/Caskroom/miniforge/base/envs/vina-cli/bin/vina` |
+| Component | Manager | Location / Path |
+|-----------|---------|-----------------|
+| Python deps | `uv` | `pyproject.toml` |
+| Vina CLI | Conda | `/opt/conda/bin/vina` (Docker) or local conda env |
+| Infrastructure | Terraform | `deployment/terraform/` |
+| Orchestration | Make | `Makefile` |
 
 #### Related Packages (installable via uv)
 
@@ -85,4 +118,4 @@ CMD ["uv", "run", "python", "-m", "app.agent_engine_app"]
 uv add numpy scipy rdkit gemmi meeko==0.6.1 py3Dmol molscrub
 ```
 
-**Note**: `autogrid` and `cctbx-base` are only available via conda-forge, not PyPI. If needed for AD4 scoring function workflows, install them in the `vina-cli` conda environment and call via subprocess similarly.
+**Note**: `autogrid` and `cctbx-base` are only available via conda-forge. If needed for AD4 scoring function workflows, install them in the `vina-cli` conda environment and call via subprocess.
