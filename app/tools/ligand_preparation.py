@@ -15,8 +15,13 @@
 """Tool for preparing molecular ligands for docking."""
 
 import os
-import subprocess
 from pathlib import Path
+from typing import Any
+
+from google.genai import types
+from meeko import MoleculePreparation, PDBQTWriterLegacy
+from molscrub import Scrub
+from rdkit import Chem
 
 
 def prepare_ligand(
@@ -25,11 +30,12 @@ def prepare_ligand(
     ph: float = 6.0,
     skip_tautomer: bool = True,
     skip_acidbase: bool = False,
+    tool_context: Any = None,
 ) -> str:
     """Prepares a ligand PDBQT file from a SMILES string for docking.
 
-    This tool uses `scrub.py` (from molscrub) to generate a protonated 3D conformer
-    and `mk_prepare_ligand.py` (from meeko) to convert it to PDBQT format.
+    This tool uses `molscrub` to generate a protonated 3D conformer
+    and `meeko` to convert it to PDBQT format.
 
     Args:
         smiles: The SMILES string of the ligand molecule.
@@ -37,65 +43,74 @@ def prepare_ligand(
         ph: The pH value for protonation. Defaults to 6.0.
         skip_tautomer: If True, skips tautomer enumeration. Defaults to True.
         skip_acidbase: If True, skips acid-base enumeration. Defaults to False.
+        tool_context: The tool context provided by the ADK runtime.
 
     Returns:
-        The absolute path to the generated PDBQT file.
+        A message indicating success and the location of the file/artifact.
 
     Raises:
-        RuntimeError: If ligand preparation scripts fail.
+        RuntimeError: If ligand preparation fails.
     """
-    base_name = Path(output_filename).stem
-    sdf_file = f"{base_name}_scrubbed.sdf"
-
-    # Step 1: Run molscrub (scrub.py) to generate 3D conformer and protonate
-    scrub_args = []
-    if skip_tautomer:
-        scrub_args.append("--skip_tautomer")
-    if skip_acidbase:
-        scrub_args.append("--skip_acidbase")
-
-    scrub_cmd = ["scrub.py", smiles, "-o", sdf_file, "--ph", str(ph)] + scrub_args
-
+    # Step 1: Generate 3D conformer and protonate using molscrub
     try:
-        # Added timeout to prevent hanging on complex molecules
-        subprocess.run(
-            scrub_cmd, check=True, capture_output=True, text=True, timeout=60
+        input_mol = Chem.MolFromSmiles(smiles)
+        if input_mol is None:
+            raise ValueError(f"Invalid SMILES string: {smiles}")
+
+        scrub = Scrub(
+            ph_low=ph,
+            ph_high=ph,
+            skip_tautomers=skip_tautomer,
+            skip_acidbase=skip_acidbase,
         )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("molscrub (scrub.py) timed out after 60 seconds.") from None
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"molscrub (scrub.py) failed: {e.stderr}") from e
-    except FileNotFoundError:
-        raise RuntimeError(
-            "scrub.py not found in PATH. Ensure molscrub is installed."
-        ) from None
+        isomer_list = scrub(input_mol)
 
-    # Step 2: Run meeko (mk_prepare_ligand.py) to convert SDF to PDBQT
-    prepare_cmd = ["mk_prepare_ligand.py", "-i", sdf_file, "-o", output_filename]
+        if not isomer_list:
+            raise RuntimeError("molscrub failed to generate any isomers.")
 
+        # For simplicity, we take the first isomer/conformer generated
+        ligand_mol = isomer_list[0]
+    except Exception as e:
+        raise RuntimeError(f"Ligand preparation (molscrub) failed: {e}") from e
+
+    # Step 2: Convert to PDBQT using meeko
     try:
-        # Added timeout to prevent hanging
-        subprocess.run(
-            prepare_cmd, check=True, capture_output=True, text=True, timeout=60
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            "mk_prepare_ligand.py timed out after 60 seconds."
-        ) from None
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"mk_prepare_ligand.py failed: {e.stderr}") from e
-    except FileNotFoundError:
-        raise RuntimeError(
-            "mk_prepare_ligand.py not found in PATH. Ensure meeko is installed."
-        ) from None
-    finally:
-        # Cleanup temporary SDF file
-        if os.path.exists(sdf_file):
-            os.remove(sdf_file)
+        preparator = MoleculePreparation()
+        molsetups = preparator.prepare(ligand_mol)
+
+        if not molsetups:
+            raise RuntimeError("meeko failed to prepare molecule setup.")
+
+        # Take the first setup
+        molsetup = molsetups[0]
+        pdbqt_string, success, error_msg = PDBQTWriterLegacy.write_string(molsetup)
+
+        if not success:
+            raise RuntimeError(f"meeko PDBQT writing failed: {error_msg}")
+
+        # Always save to local file for persistence
+        with open(output_filename, "w") as f:
+            f.write(pdbqt_string)
+
+        # If running in ADK context, save as an artifact for download
+        if tool_context and hasattr(tool_context, "save_artifact"):
+            part = types.Part(
+                inline_data=types.Blob(
+                    data=pdbqt_string.encode("utf-8"), mime_type="text/plain"
+                )
+            )
+            tool_context.save_artifact(output_filename, part)
+            return (
+                f"Ligand successfully prepared and saved as artifact: '{output_filename}'. "
+                "You can now download it directly from the dialog."
+            )
+
+    except Exception as e:
+        raise RuntimeError(f"Ligand preparation (meeko) failed: {e}") from e
 
     if not os.path.exists(output_filename):
         raise RuntimeError(f"Failed to generate output file: {output_filename}")
 
-    return os.path.abspath(output_filename)
+    return f"Ligand successfully prepared and saved to: {os.path.abspath(output_filename)}"
 
 

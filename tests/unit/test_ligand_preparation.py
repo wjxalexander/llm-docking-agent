@@ -32,46 +32,91 @@ class TestLigandPreparation(unittest.TestCase):
         if os.path.exists(sdf_file):
             os.remove(sdf_file)
 
-    @patch("subprocess.run")
-    def test_prepare_ligand_success(self, mock_run):
-        # Mock successful execution of scrub.py and mk_prepare_ligand.py
-        mock_run.return_value = MagicMock(returncode=0, stdout="success", stderr="")
+    @patch("app.tools.ligand_preparation.Scrub")
+    @patch("app.tools.ligand_preparation.MoleculePreparation")
+    @patch("app.tools.ligand_preparation.PDBQTWriterLegacy")
+    @patch("app.tools.ligand_preparation.Chem.MolFromSmiles")
+    def test_prepare_ligand_success(
+        self, mock_mol_from_smiles, mock_writer, mock_prep, mock_scrub
+    ):
+        # Setup mocks
+        mock_mol_from_smiles.return_value = MagicMock()
         
-        # We need to simulate the creation of the output file because the tool checks for it/returns its path
-        # and the real commands are mocked.
-        with open(self.output_filename, "w") as f:
-            f.write("mock pdbqt content")
+        mock_scrub_instance = mock_scrub.return_value
+        mock_scrub_instance.return_value = [MagicMock()]
+        
+        mock_prep_instance = mock_prep.return_value
+        mock_prep_instance.prepare.return_value = [MagicMock()]
+        
+        mock_writer.write_string.return_value = ("mock pdbqt content", True, "")
 
         result_path = prepare_ligand(self.smiles, self.output_filename)
-        
-        self.assertTrue(result_path.endswith(self.output_filename))
-        self.assertTrue(os.path.isabs(result_path))
-        self.assertEqual(mock_run.call_count, 2)
 
-    @patch("subprocess.run")
-    def test_prepare_ligand_scrub_failure(self, mock_run):
-        import subprocess
-        # Mock failure in scrub.py
-        mock_run.side_effect = subprocess.CalledProcessError(1, "scrub.py", stderr="scrub error")
+        self.assertIn("successfully prepared", result_path)
+        self.assertIn(os.path.abspath(self.output_filename), result_path)
+        self.assertTrue(os.path.exists(self.output_filename))
+
+    @patch("app.tools.ligand_preparation.Scrub")
+    @patch("app.tools.ligand_preparation.MoleculePreparation")
+    @patch("app.tools.ligand_preparation.PDBQTWriterLegacy")
+    @patch("app.tools.ligand_preparation.Chem.MolFromSmiles")
+    def test_prepare_ligand_success_with_artifact(
+        self, mock_mol_from_smiles, mock_writer, mock_prep, mock_scrub
+    ):
+        # Setup mocks
+        mock_mol_from_smiles.return_value = MagicMock()
         
+        mock_scrub_instance = mock_scrub.return_value
+        mock_scrub_instance.return_value = [MagicMock()]
+        
+        mock_prep_instance = mock_prep.return_value
+        mock_prep_instance.prepare.return_value = [MagicMock()]
+        
+        mock_writer.write_string.return_value = ("mock pdbqt content", True, "")
+
+        mock_tool_context = MagicMock()
+
+        result_path = prepare_ligand(self.smiles, self.output_filename, tool_context=mock_tool_context)
+
+        self.assertIn("saved as artifact", result_path)
+        self.assertTrue(os.path.exists(self.output_filename))
+        mock_tool_context.save_artifact.assert_called_once()
+
+    @patch("app.tools.ligand_preparation.Scrub")
+    @patch("app.tools.ligand_preparation.Chem.MolFromSmiles")
+    def test_prepare_ligand_scrub_failure(self, mock_mol_from_smiles, mock_scrub):
+        # Setup mocks
+        mock_mol_from_smiles.return_value = MagicMock()
+        mock_scrub_instance = mock_scrub.return_value
+        mock_scrub_instance.side_effect = Exception("scrub error")
+
         with self.assertRaises(RuntimeError) as cm:
             prepare_ligand(self.smiles, self.output_filename)
-        
-        self.assertIn("molscrub (scrub.py) failed", str(cm.exception))
 
-    @patch("subprocess.run")
-    def test_prepare_ligand_meeko_failure(self, mock_run):
-        import subprocess
-        # First call (scrub.py) succeeds, second call (mk_prepare_ligand.py) fails
-        mock_run.side_effect = [
-            MagicMock(returncode=0),
-            subprocess.CalledProcessError(1, "mk_prepare_ligand.py", stderr="meeko error")
-        ]
+        self.assertIn("Ligand preparation (molscrub) failed", str(cm.exception))
+
+    @patch("app.tools.ligand_preparation.Scrub")
+    @patch("app.tools.ligand_preparation.MoleculePreparation")
+    @patch("app.tools.ligand_preparation.PDBQTWriterLegacy")
+    @patch("app.tools.ligand_preparation.Chem.MolFromSmiles")
+    def test_prepare_ligand_meeko_failure(
+        self, mock_mol_from_smiles, mock_writer, mock_prep, mock_scrub
+    ):
+        # Setup mocks
+        mock_mol_from_smiles.return_value = MagicMock()
         
+        mock_scrub_instance = mock_scrub.return_value
+        mock_scrub_instance.return_value = [MagicMock()]
+        
+        mock_prep_instance = mock_prep.return_value
+        mock_prep_instance.prepare.return_value = [MagicMock()]
+        
+        mock_writer.write_string.return_value = ("", False, "meeko error")
+
         with self.assertRaises(RuntimeError) as cm:
             prepare_ligand(self.smiles, self.output_filename)
-        
-        self.assertIn("mk_prepare_ligand.py failed", str(cm.exception))
+
+        self.assertIn("meeko PDBQT writing failed", str(cm.exception))
 
 
 if __name__ == "__main__":
