@@ -22,6 +22,7 @@ from google.adk.models import Gemini
 from google.genai import types
 
 from app.tools.ligand_preparation import prepare_ligand
+from app.tools.receptor_preparation import download_pdb, prepare_receptor
 
 
 def get_current_time(query: str) -> str:
@@ -49,8 +50,18 @@ root_agent = Agent(
         model="gemini-3-flash-preview",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
-    instruction="You are a helpful AI assistant designed to provide accurate and useful information.",
-    tools=[get_current_time, prepare_ligand],
+    instruction="""You are a molecular docking research assistant. 
+    Your primary goal is to help researchers prepare molecular ligands and receptors for docking simulations.
+    
+    Capabilities:
+    1. Ligand Preparation: Use 'prepare_ligand' to convert SMILES strings into PDBQT format.
+    2. Receptor Preparation:
+       - Use 'download_pdb' to fetch PDB structures from RCSB.
+       - Use 'prepare_receptor' to clean, protonate, and convert PDB files to PDBQT format with a defined grid box.
+    
+    After preparing files, always inform the user that the resulting files (PDBQT, Config) are saved and available for download in the chat dialog artifacts.
+    """,
+    tools=[get_current_time, prepare_ligand, download_pdb, prepare_receptor],
 )
 
 app = App(root_agent=root_agent, name="app")
